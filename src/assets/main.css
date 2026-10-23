@@ -1,0 +1,11 @@
+@import './base.css';
+
+/* 去掉脚手架演示页的居中/双栏布局，让页面铺满视口 */
+body {
+  color: #1f2937;
+  background: #f4f6f9;
+}
+
+#app {
+  min-height: 100vh;
+}
