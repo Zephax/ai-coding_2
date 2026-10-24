@@ -18,7 +18,7 @@ const router = useRouter()
 const userStore = useUserStore()
 
 // 顶部标题取自路由 meta.title
-const pageTitle = computed(() => (route.meta.title as string | undefined) ?? '图书管理')
+const pageTitle = computed(() => route.meta.title ?? '图书管理')
 
 const displayName = computed(() => userStore.username || '未登录')
 const userInitial = computed(() => userStore.username.trim().charAt(0) || '?')

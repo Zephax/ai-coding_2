@@ -9,6 +9,7 @@ const userStore = useUserStore()
 
 const username = ref('')
 const errorMessage = ref('')
+const submitting = ref(false)
 
 const canSubmit = computed(() => username.value.trim().length > 0)
 
@@ -23,7 +24,9 @@ function resolveRedirect(): string {
   return '/books'
 }
 
-function handleLogin() {
+async function handleLogin(): Promise<void> {
+  if (submitting.value) return
+
   const name = username.value.trim()
   errorMessage.value = ''
 
@@ -32,19 +35,24 @@ function handleLogin() {
     return
   }
 
-  if (!userStore.login(name)) {
-    errorMessage.value = '登录失败，请检查用户名后重试'
-    return
+  submitting.value = true
+  try {
+    await userStore.login(name)
+    await router.replace(resolveRedirect())
+  } catch (error: unknown) {
+    // 失败就地展示服务端返回的 message
+    errorMessage.value =
+      error instanceof Error && error.message ? error.message : '登录失败，请稍后重试'
+  } finally {
+    submitting.value = false
   }
-
-  router.replace(resolveRedirect())
 }
 
 // 输入法组词时的回车用于确认候选词，不触发登录
 function handleEnter(event: KeyboardEvent) {
   if (event.isComposing) return
   event.preventDefault()
-  handleLogin()
+  void handleLogin()
 }
 </script>
 
@@ -91,7 +99,9 @@ function handleEnter(event: KeyboardEvent) {
           <p v-if="errorMessage" id="login-error" class="error" role="alert">{{ errorMessage }}</p>
         </div>
 
-        <button type="submit" class="login-button" :disabled="!canSubmit">登录</button>
+        <button type="submit" class="login-button" :disabled="!canSubmit || submitting">
+          {{ submitting ? '登录中…' : '登录' }}
+        </button>
         <p class="hint">演示环境：输入任意用户名即可登录。</p>
       </form>
     </main>

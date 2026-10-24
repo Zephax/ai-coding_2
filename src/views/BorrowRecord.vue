@@ -1,34 +1,27 @@
 <script setup lang="ts">
-interface BorrowRecord {
-  id: number
-  book: string
-  borrower: string
-  borrowDate: string
-  dueDate: string
-  returned: boolean
-}
+import { useLibraryStore } from '@/stores/library'
 
-const records: BorrowRecord[] = [
-  { id: 1, book: '三体', borrower: '陈晨', borrowDate: '2026-10-02', dueDate: '2026-11-02', returned: false },
-  { id: 2, book: '人类简史', borrower: '林晓', borrowDate: '2026-10-08', dueDate: '2026-11-08', returned: false },
-  { id: 3, book: '代码整洁之道', borrower: '赵敏', borrowDate: '2026-10-15', dueDate: '2026-11-15', returned: false },
-  { id: 4, book: '设计中的设计', borrower: '孙悦', borrowDate: '2026-10-18', dueDate: '2026-11-18', returned: false },
-  { id: 5, book: '百年孤独', borrower: '王磊', borrowDate: '2026-08-20', dueDate: '2026-09-20', returned: true },
-  { id: 6, book: '活着', borrower: '周涛', borrowDate: '2026-07-11', dueDate: '2026-08-11', returned: true },
-]
+const library = useLibraryStore()
+
+// 归还后记录状态与图书库存由 store 同步更新
+function handleReturn(recordId: number) {
+  library.returnBook(recordId)
+}
 </script>
 
 <template>
   <section class="card">
     <header class="card-header">
       <h2 class="card-title">借阅记录</h2>
-      <p class="card-meta">共 {{ records.length }} 条</p>
+      <p class="card-meta">
+        共 {{ library.recordRows.length }} 条 · 借阅中 {{ library.borrowingCount }} 条
+      </p>
     </header>
 
     <div class="table-wrap">
       <table class="record-table">
         <caption class="sr-only">
-          借阅记录列表，包含图书、借阅人、借阅日期、应还日期与状态
+          借阅记录列表，包含图书、借阅人、借阅日期、应还日期、状态与归还操作
         </caption>
         <thead>
           <tr>
@@ -37,11 +30,12 @@ const records: BorrowRecord[] = [
             <th scope="col">借阅日期</th>
             <th scope="col">应还日期</th>
             <th scope="col">状态</th>
+            <th scope="col">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in records" :key="record.id">
-            <th scope="row" class="book-name">{{ record.book }}</th>
+          <tr v-for="record in library.recordRows" :key="record.id">
+            <th scope="row" class="book-name">{{ record.bookTitle }}</th>
             <td class="cell-text">{{ record.borrower }}</td>
             <td class="cell-date">{{ record.borrowDate }}</td>
             <td class="cell-date">{{ record.dueDate }}</td>
@@ -52,6 +46,17 @@ const records: BorrowRecord[] = [
               >
                 {{ record.returned ? '已归还' : '借阅中' }}
               </span>
+            </td>
+            <td>
+              <button
+                v-if="!record.returned"
+                type="button"
+                class="return-button"
+                @click="handleReturn(record.id)"
+              >
+                归还
+              </button>
+              <span v-else class="cell-empty">—</span>
             </td>
           </tr>
         </tbody>
@@ -99,7 +104,7 @@ const records: BorrowRecord[] = [
 
 .record-table {
   width: 100%;
-  min-width: 640px;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -176,6 +181,34 @@ const records: BorrowRecord[] = [
 .status--returned {
   background: #ecfdf5;
   color: #047857;
+}
+
+.return-button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.return-button:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.return-button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.cell-empty {
+  color: #9ca3af;
 }
 
 .sr-only {
