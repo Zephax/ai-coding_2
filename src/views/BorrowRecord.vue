@@ -1,62 +1,98 @@
 <script setup lang="ts">
-interface BorrowRecord {
+/**
+ * 借阅管理页：el-tabs 切换「借阅记录表格 / 借阅日历」两种视图；
+ * 记录与库存都来自 library store 的本地演示数据，归还操作由 store 同步。
+ */
+import { computed, ref } from 'vue'
+import BorrowCalendar from '@/components/BorrowCalendar.vue'
+import { useLibraryStore } from '@/stores/library'
+
+const library = useLibraryStore()
+
+interface RecordRow {
   id: number
-  book: string
+  bookTitle: string
   borrower: string
   borrowDate: string
   dueDate: string
   returned: boolean
+  /** 未归还且已过应还日期 */
+  overdue: boolean
 }
 
-const records: BorrowRecord[] = [
-  { id: 1, book: '三体', borrower: '陈晨', borrowDate: '2026-10-02', dueDate: '2026-11-02', returned: false },
-  { id: 2, book: '人类简史', borrower: '林晓', borrowDate: '2026-10-08', dueDate: '2026-11-08', returned: false },
-  { id: 3, book: '代码整洁之道', borrower: '赵敏', borrowDate: '2026-10-15', dueDate: '2026-11-15', returned: false },
-  { id: 4, book: '设计中的设计', borrower: '孙悦', borrowDate: '2026-10-18', dueDate: '2026-11-18', returned: false },
-  { id: 5, book: '百年孤独', borrower: '王磊', borrowDate: '2026-08-20', dueDate: '2026-09-20', returned: true },
-  { id: 6, book: '活着', borrower: '周涛', borrowDate: '2026-07-11', dueDate: '2026-08-11', returned: true },
-]
+// 本地日期 yyyy-MM-dd，与记录中的日期格式一致，可直接做字典序比较
+function todayString(): string {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
+const rows = computed<RecordRow[]>(() => {
+  const today = todayString()
+  return library.recordRows.map((record) => ({
+    ...record,
+    overdue: !record.returned && record.dueDate < today,
+  }))
+})
+
+const overdueCount = computed(() => rows.value.filter((row) => row.overdue).length)
+
+// 当前视图：记录表格 / 到期日历
+const activeTab = ref<'records' | 'calendar'>('records')
+
+// 归还后记录状态与图书库存由 store 同步更新
+function handleReturn(recordId: number): void {
+  library.returnBook(recordId)
+}
 </script>
 
 <template>
   <section class="card">
     <header class="card-header">
-      <h2 class="card-title">借阅记录</h2>
-      <p class="card-meta">共 {{ records.length }} 条</p>
+      <h2 class="card-title">借阅管理</h2>
+      <p class="card-meta">
+        <span>共 {{ rows.length }} 条 · 借阅中 {{ library.borrowingCount }} 条</span>
+        <el-tag v-if="overdueCount > 0" type="danger" size="small">
+          {{ overdueCount }} 条已逾期
+        </el-tag>
+      </p>
     </header>
 
-    <div class="table-wrap">
-      <table class="record-table">
-        <caption class="sr-only">
-          借阅记录列表，包含图书、借阅人、借阅日期、应还日期与状态
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">图书</th>
-            <th scope="col">借阅人</th>
-            <th scope="col">借阅日期</th>
-            <th scope="col">应还日期</th>
-            <th scope="col">状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="record in records" :key="record.id">
-            <th scope="row" class="book-name">{{ record.book }}</th>
-            <td class="cell-text">{{ record.borrower }}</td>
-            <td class="cell-date">{{ record.borrowDate }}</td>
-            <td class="cell-date">{{ record.dueDate }}</td>
-            <td>
-              <span
-                class="status"
-                :class="record.returned ? 'status--returned' : 'status--borrowing'"
-              >
-                {{ record.returned ? '已归还' : '借阅中' }}
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <el-tabs v-model="activeTab" class="body-tabs">
+      <el-tab-pane label="借阅记录" name="records">
+        <el-table :data="rows">
+          <el-table-column prop="bookTitle" label="图书" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="borrower" label="借阅人" width="120" />
+          <el-table-column prop="borrowDate" label="借阅日期" width="130" />
+          <el-table-column prop="dueDate" label="应还日期" width="130" />
+          <el-table-column label="状态" width="110">
+            <template #default="{ row }: { row: RecordRow }">
+              <!-- 三态：借阅中 / 已逾期（未归还且超过应还日期）/ 已归还 -->
+              <el-tag :type="row.returned ? 'success' : row.overdue ? 'danger' : 'primary'">
+                {{ row.returned ? '已归还' : row.overdue ? '已逾期' : '借阅中' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }: { row: RecordRow }">
+              <el-button v-if="!row.returned" size="small" @click="handleReturn(row.id)">
+                归还
+              </el-button>
+              <span v-else class="cell-empty">—</span>
+            </template>
+          </el-table-column>
+          <!-- 空数据走表格内置 empty 插槽 -->
+          <template #empty>
+            <el-empty description="暂无借阅记录" :image-size="80" />
+          </template>
+        </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="借阅日历" name="calendar">
+        <BorrowCalendar :records="rows" />
+      </el-tab-pane>
+    </el-tabs>
   </section>
 </template>
 
@@ -73,8 +109,8 @@ const records: BorrowRecord[] = [
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 12px;
-  padding: 18px 20px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 18px 20px 0;
+  border-bottom: none;
 }
 
 .card-title {
@@ -85,119 +121,30 @@ const records: BorrowRecord[] = [
 }
 
 .card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: #6b7280;
   font-size: 13px;
   line-height: 1.5;
 }
 
-/* 移动端可横向滚动，避免列被压缩导致文字重叠 */
-.table-wrap {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+/* tab 栏与卡片内容左右对齐，底部无边距让表格贴住 tab 下划线 */
+.body-tabs :deep(.el-tabs__header) {
+  padding: 0 20px;
+  margin-bottom: 0;
 }
 
-.record-table {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.record-table th,
-.record-table td {
-  padding: 12px 20px;
-  text-align: left;
-  white-space: nowrap;
-  vertical-align: middle;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.record-table thead th {
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.record-table tbody th {
-  font-weight: 600;
-  text-align: left;
-}
-
-.record-table tbody tr:last-child th,
-.record-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.record-table tbody tr:hover {
-  background: #f8fafc;
-}
-
-.book-name {
-  color: #111827;
-}
-
-.cell-text,
-.cell-date {
-  color: #475569;
-}
-
-.cell-date {
-  font-variant-numeric: tabular-nums;
-}
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.status::before {
-  content: '';
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.status--borrowing {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.status--returned {
-  background: #ecfdf5;
-  color: #047857;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+/* 已归还行的操作列占位符 */
+.cell-empty {
+  color: #9ca3af;
 }
 
 @media (max-width: 768px) {
-  .card-header {
-    padding: 16px;
-  }
-
-  .record-table th,
-  .record-table td {
-    padding: 12px 16px;
+  .card-header,
+  .body-tabs :deep(.el-tabs__header) {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 </style>
